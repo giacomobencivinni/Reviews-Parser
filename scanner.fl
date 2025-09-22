@@ -1,0 +1,111 @@
+%{
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "parser.tab.h"
+
+extern YYSTYPE yylval;
+int line_number = 1;
+%}
+
+%x STATO_FRECCIA SEZIONE_UTENTI SEZIONE_RECENSIONI DOPO_TRATTINO
+%option noyywrap
+
+%%
+
+<INITIAL><<EOF>>  {
+    printf("File vuoto o fine file inaspettatp\n");
+    yyterminate();
+}            
+
+"%%%"               {BEGIN(SEZIONE_UTENTI); return SEPARATORE_SEZIONI;}
+"&&&"               {return SEPARATORE_PRODOTTI;}
+"Nome prodotto"     {return NOME_PRODOTTO;}
+"Categoria"         {return CATEGORIA;}
+"Prezzo"            {return PREZZO;}
+"->"                {BEGIN(STATO_FRECCIA); return FRECCIA;}
+"-"                 {return TRATTINO;}
+
+<SEZIONE_UTENTI>"%%%" {
+    BEGIN(SEZIONE_RECENSIONI);
+    return SEPARATORE_SEZIONI;
+}
+
+
+[a-z]{4}[0-9]{2}                { 
+                                  yylval.str = strdup(yytext); 
+                                  return ID_PRODOTTO; 
+                                }
+
+<SEZIONE_UTENTI>"-"                     {BEGIN(DOPO_TRATTINO); return TRATTINO;}           
+
+<SEZIONE_UTENTI>[a-zA-Z][a-zA-Z0-9]*    { 
+                                           yylval.str = strdup(yytext); 
+                                           return ID_UTENTE; 
+                                         }
+
+<DOPO_TRATTINO>[a-zA-Z][a-zA-Z0-9 .\-]*   { 
+                                              yylval.str = strdup(yytext);
+                                              BEGIN(SEZIONE_UTENTI);
+                                              return CATEGORIA_UTENTE; 
+                                            }
+
+<SEZIONE_RECENSIONI>[a-z]{4}[0-9]{2}    { 
+                                           yylval.str = strdup(yytext);
+                                           return ID_PRODOTTO; 
+                                         }
+
+<SEZIONE_RECENSIONI>[a-zA-Z][a-zA-Z0-9]*   { 
+                                              yylval.str = strdup(yytext); 
+                                              return ID_UTENTE; 
+                                            }
+
+<SEZIONE_RECENSIONI>\*{0,5}             { 
+                                           yylval.int_val = strlen(yytext); 
+                                           return PUNTEGGIO; 
+                                         }
+
+<SEZIONE_RECENSIONI>\${0,5}             { 
+                                           yylval.int_val = strlen(yytext);
+                                           return PREZZO_ARTICOLO; 
+                                         }
+
+<SEZIONE_RECENSIONI>"("                 {return PAR_AP;}
+<SEZIONE_RECENSIONI>")"                 {return PAR_CH;}
+<SEZIONE_RECENSIONI>","                 {return VIRGOLA;}
+
+<SEZIONE_RECENSIONI><<EOF>> { 
+    yyterminate();
+}
+
+<STATO_FRECCIA>[ \t]+           {/* ignora spazi e tab */}
+
+<STATO_FRECCIA>[a-zA-Z][a-zA-Z0-9 .\-]*    {
+                                            yylval.str = strdup(yytext);
+                                            BEGIN(INITIAL); 
+                                            return VALORE_CAMPO;
+                                        }
+
+<STATO_FRECCIA>[0-9]+\.[0-9]+   {
+                                yylval.float_val = atof(yytext); 
+                                BEGIN(INITIAL);
+                                return FLOAT_NUM;
+                                }
+
+<STATO_FRECCIA>[0-9]+           {
+                                yylval.int_val = atoi(yytext); 
+                                BEGIN(INITIAL);
+                                return INT_NUM;
+                                }
+
+[ \t]+                          ;
+
+\n                              { line_number++;}
+ 
+.                               { 
+                                  fprintf(stderr, "Carattere non riconosciuto: %c alla riga %d\n", 
+                                          yytext[0], line_number); 
+                                }
+               
+
+%%
